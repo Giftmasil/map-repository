@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Location Feature Example</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <script>
+      let map;
+      let userLocation;
+      let routingControl;
+      let currentDirectionIndex = 0;
+
+      function initMap() {
+        map = L.map('map').setView([0, 0], 2);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(async function(position) {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            userLocation = [lat, lon];
+
+            map.setView(userLocation, 14);
+
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+            const data = await response.json();
+            const placeName = data.display_name || "Unknown location";
+
+            L.marker(userLocation).addTo(map)
+              .bindPopup(`You are here!<br>Latitude: ${lat}<br>Longitude: ${lon}<br>Place: ${placeName}`)
+              .openPopup();
+
+            document.getElementById('location-info').innerHTML = `
+              <p>Latitude: ${lat}</p>
+              <p>Longitude: ${lon}</p>
+              <p>Place: ${placeName}</p>
+            `;
+          }, showError);
+        } else {
+          alert("Geolocation is not supported by this browser.");
+        }
+      }
+
+      async function findLocation(lat, lon) {
+        const givenLocation = [lat, lon];
+
+        map.setView(givenLocation, 14);
+
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+        const data = await response.json();
+        const placeName = data.display_name || "Unknown location";
+
+        L.marker(givenLocation).addTo(map)
+          .bindPopup(`Latitude: ${lat}<br>Longitude: ${lon}<br>Place: ${placeName}`)
+          .openPopup();
+
+        document.getElementById('location-info').innerHTML = `
+          <p>Latitude: ${lat}</p>
+          <p>Longitude: ${lon}</p>
+          <p>Place: ${placeName}</p>
+        `;
+
+        // Enable the start button
+        document.getElementById('start-route').disabled = false;
+
+        // Save the destination for later use
+        document.getElementById('latitude').dataset.destinationLat = lat;
+        document.getElementById('longitude').dataset.destinationLon = lon;
+      }
+
+      function startRoute() {
+        const lat = parseFloat(document.getElementById('latitude').dataset.destinationLat);
+        const lon = parseFloat(document.getElementById('longitude').dataset.destinationLon);
+        const destination = [lat, lon];
+
+        if (userLocation && destination) {
+          if (routingControl) {
+            map.removeControl(routingControl);
+          }
+
+          routingControl = L.Routing.control({
+            waypoints: [
+              L.latLng(userLocation),
+              L.latLng(destination)
+            ],
+            routeWhileDragging: true,
+            createMarker: function() { return null; },
+            lineOptions: {
+              styles: [{ color: 'blue', opacity: 0.6, weight: 4 }]
+            }
+          }).addTo(map);
+
+          routingControl.on('routesfound', function(e) {
+            const routes = e.routes;
+            const directions = routes[0].instructions;
+
+            speakNextDirection(directions);
+          });
+        } else {
+          alert("User location or destination not available.");
+        }
+      }
+
+      function speakNextDirection(directions) {
+        const direction = directions[currentDirectionIndex];
+        if (direction) {
+          const utterance = new SpeechSynthesisUtterance(direction.text);
+          window.speechSynthesis.speak(utterance);
+
+          currentDirectionIndex++;
+        }
+      }
+
+      function showError(error) {
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            alert("User denied the request for Geolocation.");
+            break;
+          case error.POSITION_UNAVAILABLE:
+            alert("Location information is unavailable.");
+            break;
+          case error.TIMEOUT:
+            alert("The request to get user location timed out.");
+            break;
+          case error.UNKNOWN_ERROR:
+            alert("An unknown error occurred.");
+            break;
+        }
+      }
+
+      window.onload = initMap;
+    </script>
+  </head>
+  <body>
+    <h1>Location Feature Example</h1>
+    <div id="map" style="height: 400px; width: 100%;"></div>
+    <div id="location-info" style="margin-top: 20px;">
+      <!-- Location information will be displayed here -->
+    </div>
+    <div style="margin-top: 20px;">
+      <h2>Find Location</h2>
+      <label for="latitude">Latitude:</label>
+      <input type="text" id="latitude" placeholder="Enter latitude">
+      <label for="longitude">Longitude:</label>
+      <input type="text" id="longitude" placeholder="Enter longitude">
+      <button onclick="findLocation(parseFloat(document.getElementById('latitude').value), parseFloat(document.getElementById('longitude').value))">Find Location</button>
+      <button id="start-route" onclick="startRoute()" disabled>Start Route</button>
+    </div>
+  </body>
+</html>
